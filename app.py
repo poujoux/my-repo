@@ -1,51 +1,38 @@
-from modules.predict import EducateIt 
-from flask import Flask, request, render_template, jsonify
-from modules.apisendai import sendai # relative imports from same package
-from dotenv import load_dotenv
+import logging
 
-import os
+from flask import Flask, jsonify, render_template, request
+from modules.model_service import predict_all
 
 app = Flask(__name__, template_folder="templates")
+app.config["MAX_CONTENT_LENGTH"] = 8 * 1024 * 1024
 
-load_dotenv()
-
-api_key = os.getenv("api_key")
-apikeym = os.getenv("mastodon_api_key")
 
 @app.route("/")
 def main():
     return render_template("index.html")
 
+
 @app.route("/educateit", methods=["POST"])
 def educate():
-    imgs = request.files.get("efiles")
-    print(12*"-", "imgs:", imgs)
-
-    if not imgs:
-        return jsonify({"No images uploaded"}), 400
-
-    
-    obj = EducateIt(imgs)
-    print(12*"-", "The object has been created")
-
-    #prediction = obj.predict()
-    prediction = -1
-    print(12*"-", "Prediction", prediction)
-
-    if prediction == -1:
-
-        predictionobj = sendai(api_key)
-        predictiontxt = predictionobj.imggguess(imgs)
-
-        print(12*"-", "Prediction...", predictiontxt)
-        return jsonify({"msg": predictiontxt}), 400
+    uploaded = request.files.get("efiles")
+    if uploaded is None or not uploaded.filename:
+        return jsonify({"error": "Please choose a plant image first."}), 400
+    try:
+        image_bytes = uploaded.read()
+        if not image_bytes:
+            return jsonify({"error": "The uploaded file is empty."}), 400
+        return jsonify({"predictions": predict_all(image_bytes)}), 200
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception:
+        app.logger.exception("Plant prediction failed")
+        return jsonify({"error": "Could not process image. Ensure models are trained."}), 500
 
 
-    result = obj.putfiles(predictiontxt)
-    print(12*"-", "That guess")
+@app.errorhandler(413)
+def too_large(_error):
+    return jsonify({"error": "Image is too large. Maximum upload size is 8 MB."}), 413
 
-    return jsonify({"msg": prediction}), 200
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8080, debug=True)
-    
+    app.run(host="127.0.0.1", port=8080, debug=False)
