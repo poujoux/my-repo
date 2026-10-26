@@ -1,86 +1,79 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>E</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Plant Identifier — Model Comparison</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 820px; margin: 2rem auto; padding: 0 1rem; color: #1f2937; }
+    form { padding: 1rem; border: 1px solid #d1d5db; border-radius: 12px; }
+    button { margin-top: 1rem; padding: .65rem 1rem; cursor: pointer; }
+    button:disabled { cursor: wait; opacity: .65; }
+    #preview { display: none; max-width: 220px; max-height: 220px; margin-top: 1rem; border-radius: 8px; }
+    #message { white-space: pre-wrap; }
+    .results { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 1rem; margin-top: 1rem; }
+    .result { border: 1px solid #d1d5db; border-radius: 10px; padding: 1rem; }
+    .result h3 { margin-top: 0; }
+    .muted { color: #6b7280; font-size: .92rem; }
+  </style>
 </head>
-
 <body>
+  <h1>Plant Identifier</h1>
+  <p>Upload one plant image to compare KNN, SVM, and MobileNetV2.</p>
+  <form id="main" method="post" action="/educateit" enctype="multipart/form-data">
+    <label for="efiles">Choose a plant image (JPG, PNG, or WebP)</label><br>
+    <input type="file" id="efiles" name="efiles" accept="image/jpeg,image/png,image/webp" required>
+    <br><button id="ebutton" type="submit">Run all three models</button>
+  </form>
+  <img id="preview" alt="Selected plant image preview">
+  <p id="message" role="status" aria-live="polite"></p>
+  <section id="results" class="results" aria-label="Model predictions"></section>
+  <script>
+    const form = document.getElementById("main");
+    const fileInput = document.getElementById("efiles");
+    const button = document.getElementById("ebutton");
+    const message = document.getElementById("message");
+    const results = document.getElementById("results");
+    const preview = document.getElementById("preview");
+    let previewUrl = null;
 
-    <h1 id="caption">n</h1>
+    fileInput.addEventListener("change", () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      const file = fileInput.files[0];
+      if (!file) { preview.style.display = "none"; return; }
+      previewUrl = URL.createObjectURL(file);
+      preview.src = previewUrl;
+      preview.style.display = "block";
+    });
 
-    <form id="main" method="POST" enctype="multipart/form-data">
-
-        <label for="efiles">Put files</label>
-	<input type="file" id="efiles" name="efiles" required>
-
-	<br><br>
-
-        <button type="submit" id="ebutton">Upload</button>
-    </form>
-
-    <p id="message"></p>
-
-    <script>
-
-        const efiles = document.getElementById("efiles")
-	    const message = document.getElementById("message");
-
-
-
-        document.getElementById("main").addEventListener("submit", async (event) => {
-            event.preventDefault();
-
-            const form = new FormData(event.target);
-
-            try {
-
-		    const response = await fetch(`/educateit`, {
-                    method: "POST",
-                    body: form
-                });
-		const data = await response.json();
-		if (!response.ok) {
-		    throw new Error(data.msg || "Upload failed");
-		}
-		    
-			    const myimg = document.createElement("img");
-			    const br = document.createElement("br");
-			    const br3 = document.createElement("br");
-			    myimg.width = 100;
-			    myimg.height = 100;
-			    myimg.src = URL.createObjectURL(efiles.files[0]);
-			    document.body.appendChild(br3);
-			    document.body.appendChild(br);
-			    document.body.appendChild(myimg);
-
-		    //img.style.display = "none";
-		    message.textContent = data.msg;
-		    message.style.color = "green";
-
-
-		    setTimeout(() => {
-			    window.location.reload(); 
-		    }, 3000);
-
-
-	    } 
-		catch (error) {
-			console.error(error);
-
-			message.textContent = error.message;
-			message.style.color = "red";
-
-		}         });
-
-
-    </script>
-
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (!fileInput.files.length) return;
+      button.disabled = true;
+      message.textContent = "Running predictions…";
+      results.replaceChildren();
+      try {
+        const response = await fetch("/educateit", { method: "POST", body: new FormData(form) });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Prediction failed.");
+        for (const [modelName, prediction] of Object.entries(data.predictions)) {
+          const card = document.createElement("article");
+          card.className = "result";
+          const title = document.createElement("h3");
+          title.textContent = modelName;
+          const species = document.createElement("p");
+          species.textContent = "Predicted species: " + prediction.species;
+          const score = document.createElement("p");
+          score.className = "muted";
+          score.textContent = "Model score: " + (prediction.score * 100).toFixed(1) + "%";
+          card.append(title, species, score);
+          results.appendChild(card);
+        }
+        message.textContent = "Finished. Model scores are not guaranteed probabilities of correctness.";
+      } catch (error) {
+        message.textContent = error.message;
+      } finally { button.disabled = false; }
+    });
+  </script>
 </body>
 </html>
-
-    
-</body>
-</html>
-
